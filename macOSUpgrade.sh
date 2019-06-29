@@ -53,6 +53,9 @@
 # USER VARIABLES
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+##Specify the name of your Support team
+itSupportName="IT Support Center"
+
 ##Specify path to OS installer. Use Parameter 4 in the JSS, or specify here
 ##Example: /Applications/Install macOS High Sierra.app
 OSInstaller="$4"
@@ -111,6 +114,10 @@ else
     # Installer of macOS 10.13 or earlier try to do auth reboot.
     cancelFVAuthReboot=0
 fi
+
+##Enter the Path to a package that you would like to install as after the installation.
+installpackagePath="${10}"
+
 
 ##Title of OS
 macOSname=$(/bin/echo "$OSInstaller" | /usr/bin/sed -E 's/(.+)?Install(.+)\.app\/?/\2/' | /usr/bin/xargs)
@@ -239,6 +246,24 @@ validate_free_space() {
     fi
 }
 
+validate_install_package () {
+    ## Check if a package is set to isntall and if it's where it's supposed to be
+    if [[ "$installpackagePath" ]] ; then
+        if [[ $versionMajor -ge 13 ]] ; then
+            if [[ -f "$installpackagePath" ]] ;then
+                installpackageopt+="--installpackage $installpackagePath "
+            else ##installpackagePath file not found
+                sysRequirementErrors+=("Package configured for after the OS install is not present: ${installpackagePath}")
+                /bin/echo "Install Package: ERROR - ${installpackagePath} is not present."
+            fi ##installpackagePath file  found
+        else ##not greater or equal to 10.13 installer
+            sysRequirementErrors+=("Package configured for after the OS install is not present: ${installpackagePath}")
+            /bin/echo "Install Package: ERROR - --installpackage is not not supported this must be an installer for macOS 10.13 or higher."
+        fi ##greater or equal to 10.13 installer
+    fi
+
+}
+
 verifyChecksum() {
     if [ -n "$installESDChecksum" ]; then
         osChecksum=$( /sbin/md5 -q "$OSInstaller/Contents/SharedSupport/InstallESD.dmg" )
@@ -284,6 +309,7 @@ currentUser=$( /usr/bin/stat -f %Su /dev/console )
 fvStatus=$( /usr/bin/fdesetup status | head -1 )
 
 ##Run system requirement checks
+validate_install_package
 validate_power_status
 validate_free_space
 
@@ -294,7 +320,7 @@ if [[ "${#sysRequirementErrors[@]}" -ge 1 ]]; then
 
 $( /usr/bin/printf '\t• %s\n' "${sysRequirementErrors[@]}" )
 
-If you continue to experience this issue, please contact the IT Support Center." -iconSize 100 -button1 "OK" -defaultButton 1
+If you continue to experience this issue, please contact the $itSupportName." -iconSize 100 -button1 "OK" -defaultButton 1
 
     cleanExit 1
 fi
@@ -330,7 +356,7 @@ done
 if [ "$unsuccessfulDownload" -eq 1 ]; then
     /bin/echo "macOS Installer Downloaded 3 Times - Checksum is Not Valid"
     /bin/echo "Prompting user for error and exiting..."
-    /Library/Application\ Support/JAMF/bin/jamfHelper.app/Contents/MacOS/jamfHelper -windowType utility -title "$title" -icon "$errorIcon" -heading "Error Downloading $macOSname" -description "We were unable to prepare your computer for $macOSname. Please contact the IT Support Center." -iconSize 100 -button1 "OK" -defaultButton 1
+    /Library/Application\ Support/JAMF/bin/jamfHelper.app/Contents/MacOS/jamfHelper -windowType utility -title "$title" -icon "$errorIcon" -heading "Error Downloading $macOSname" -description "We were unable to prepare your computer for $macOSname. Please contact the $itSupportName." -iconSize 100 -button1 "OK" -defaultButton 1
     cleanExit 0
 fi
 
@@ -463,9 +489,9 @@ fi
 
 osinstallLogfile="/var/log/startosinstall.log"
 if [ "$versionMajor" -ge 14 ]; then
-    eval "\"$OSInstaller/Contents/Resources/startosinstall\"" "$eraseopt" --agreetolicense --nointeraction --pidtosignal "$jamfHelperPID" >> "$osinstallLogfile" 2>&1 &
+    eval "\"$OSInstaller/Contents/Resources/startosinstall\"" "$eraseopt" "$installpackageopt" --agreetolicense --nointeraction --pidtosignal "$jamfHelperPID" >> "$osinstallLogfile" 2>&1 &
 else
-    eval "\"$OSInstaller/Contents/Resources/startosinstall\"" "$eraseopt" --applicationpath "\"$OSInstaller\"" --agreetolicense --nointeraction --pidtosignal "$jamfHelperPID" >> "$osinstallLogfile" 2>&1 &
+    eval "\"$OSInstaller/Contents/Resources/startosinstall\"" "$eraseopt" "$installpackageopt" --applicationpath "\"$OSInstaller\"" --agreetolicense --nointeraction --pidtosignal "$jamfHelperPID" >> "$osinstallLogfile" 2>&1 &
 fi
 /bin/sleep 3
 
